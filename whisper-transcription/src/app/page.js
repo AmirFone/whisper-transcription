@@ -1,123 +1,84 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from "react";
+import { useReactMediaRecorder } from "react-media-recorder";
+import axios from "axios";
 
 export default function Home() {
-    const [isRecording, setIsRecording] = useState(false);
-    const [audioUrl, setAudioUrl] = useState(null);
-    const [transcription, setTranscription] = useState('');
-    const [apiKey, setApiKey] = useState('');
-    const [mediaRecorder, setMediaRecorder] = useState(null);
-    const [recordingIndicator, setRecordingIndicator] = useState(false);
-    const [error, setError] = useState('');
+  const [transcript, setTranscript] = useState("");
+  const [apiKey, setApiKey] = useState(localStorage.getItem("apiKey") || "");
 
-    let audioChunks = [];
+  const {
+    status,
+    startRecording,
+    stopRecording,
+    mediaBlobUrl,
+    mediaBlob,
+  } = useReactMediaRecorder({ audio: true });
 
-    useEffect(() => {
-        const savedApiKey = localStorage.getItem('apiKey');
-        if (savedApiKey) {
-            setApiKey(savedApiKey);
-        }
-    }, []);
+  const handleApiKeyChange = (e) => {
+    const newApiKey = e.target.value;
+    setApiKey(newApiKey);
+    localStorage.setItem("apiKey", newApiKey);
+  };
 
-    const handleRecord = () => {
-        if (!isRecording) {
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    const recorder = new MediaRecorder(stream);
-                    setMediaRecorder(recorder);
-                    recorder.start();
-                    setIsRecording(true);
-                    setRecordingIndicator(true);
+  const handleUpload = async () => {
+    if (!mediaBlob) {
+      alert("Please record something first.");
+      return;
+    }
 
-                    recorder.ondataavailable = event => {
-                        audioChunks.push(event.data);
-                    };
+    const formData = new FormData();
+    formData.append("file", mediaBlob, "recording.wav");
+    formData.append("apiKey", apiKey);
 
-                    recorder.onstop = () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                        const url = URL.createObjectURL(audioBlob);
-                        setAudioUrl(url);
-                        console.log('Audio Blob:', audioBlob);
-                        audioChunks = []; // Reset audio chunks after recording is stopped
+    try {
+      const response = await axios.post("/api/transcribe", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      setTranscript(response.data.text);
+    } catch (error) {
+      console.error("Error uploading file:", error);
+    }
+  };
 
-                        // Debugging: Playback the audio to verify recording
-                        const audio = new Audio(url);
-                        audio.play();
-
-                        sendAudioToWhisper(audioBlob);
-                        setIsRecording(false);
-                        setRecordingIndicator(false);
-                    };
-                })
-                .catch(err => {
-                    console.error('Error accessing media devices.', err);
-                    setError('Error accessing media devices: ' + err.message);
-                });
-        } else {
-            if (mediaRecorder) {
-                mediaRecorder.stop();
-            }
-        }
-    };
-
-    const sendAudioToWhisper = async (audioBlob) => {
-        const formData = new FormData();
-        formData.append('file', audioBlob);
-        formData.append('model', 'whisper-1');
-
-        try {
-            const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: formData
-            });
-
-            if (response.status === 429) {
-                setError('Rate limit exceeded. Please try again later.');
-                return;
-            }
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error('API Error:', errorData);
-                setError(`API Error: ${errorData.error.message}`);
-                return;
-            }
-
-            const data = await response.json();
-            console.log('API Response:', data);
-            setTranscription(data.text);
-        } catch (error) {
-            console.error('Network Error:', error);
-            setError('Network Error: ' + error.message);
-        }
-    };
-
-    const handleApiKeyChange = (e) => {
-        const newApiKey = e.target.value;
-        setApiKey(newApiKey);
-        localStorage.setItem('apiKey', newApiKey);
-    };
-
-    return (
-        <div className="container">
-            <h1>Audio to Text Transcription</h1>
-            <button onClick={handleRecord}>
-                {isRecording ? 'Stop Recording' : 'Start Recording'}
-            </button>
-            <input
-                type="text"
-                placeholder="Enter your OpenAI API Key"
-                value={apiKey}
-                onChange={handleApiKeyChange}
-            />
-            {recordingIndicator && <div className="recording-indicator">Recording...</div>}
-            {audioUrl && <audio src={audioUrl} controls />}
-            <p>{transcription}</p>
-            {error && <p className="error">{error}</p>}
+  return (
+    <div className="container mx-auto p-4">
+      <h1 className="text-xl font-bold mb-4">Audio to Text Transcription</h1>
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="Enter your OpenAI API Key"
+          value={apiKey}
+          onChange={handleApiKeyChange}
+          className="border p-2 w-full"
+        />
+      </div>
+      <div className="mb-4">
+        <button onClick={startRecording} className="bg-blue-500 text-white p-2 mr-2">
+          Start Recording
+        </button>
+        <button onClick={stopRecording} className="bg-red-500 text-white p-2">
+          Stop Recording
+        </button>
+      </div>
+      {mediaBlobUrl && (
+        <div className="mb-4">
+          <audio src={mediaBlobUrl} controls />
         </div>
-    );
+      )}
+      <button onClick={handleUpload} className="bg-green-500 text-white p-2">
+        Upload and Transcribe
+      </button>
+      {transcript && (
+        <div className="mt-4 p-4 border">
+          <h2 className="text-lg font-bold">Transcript</h2>
+          <p>{transcript}</p>
+        </div>
+      )}
+      <p>Status: {status}</p>
+    </div>
+  );
 }

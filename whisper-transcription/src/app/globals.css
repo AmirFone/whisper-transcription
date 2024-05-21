@@ -29,14 +29,6 @@ audio {
   margin: 20px;
 }
 
-.recording-indicator {
-  margin: 10px;
-  padding: 10px;
-  color: red;
-  font-weight: bold;
-}
-
 .error {
   color: red;
-  margin-top: 10px;
 }
