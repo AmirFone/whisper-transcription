@@ -9,6 +9,7 @@ export default function Home() {
     const [apiKey, setApiKey] = useState('');
     const [mediaRecorder, setMediaRecorder] = useState(null);
     const [recordingIndicator, setRecordingIndicator] = useState(false);
+    const [error, setError] = useState('');
 
     let audioChunks = [];
 
@@ -24,10 +25,10 @@ export default function Home() {
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
                     const recorder = new MediaRecorder(stream);
+                    setMediaRecorder(recorder);
                     recorder.start();
                     setIsRecording(true);
                     setRecordingIndicator(true);
-                    setMediaRecorder(recorder);
 
                     recorder.ondataavailable = event => {
                         audioChunks.push(event.data);
@@ -37,15 +38,26 @@ export default function Home() {
                         const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
                         const url = URL.createObjectURL(audioBlob);
                         setAudioUrl(url);
-                        console.log('Audio Blob:', audioBlob); // Debugging statement
+                        console.log('Audio Blob:', audioBlob);
+                        audioChunks = []; // Reset audio chunks after recording is stopped
+
+                        // Debugging: Playback the audio to verify recording
+                        const audio = new Audio(url);
+                        audio.play();
+
                         sendAudioToWhisper(audioBlob);
                         setIsRecording(false);
                         setRecordingIndicator(false);
-                        audioChunks = []; // Reset audio chunks after recording is stopped
                     };
+                })
+                .catch(err => {
+                    console.error('Error accessing media devices.', err);
+                    setError('Error accessing media devices: ' + err.message);
                 });
         } else {
-            mediaRecorder.stop();
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+            }
         }
     };
 
@@ -54,17 +66,34 @@ export default function Home() {
         formData.append('file', audioBlob);
         formData.append('model', 'whisper-1');
 
-        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: formData
-        });
+        try {
+            const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: formData
+            });
 
-        const data = await response.json();
-        console.log('API Response:', data); // Debugging statement
-        setTranscription(data.text);
+            if (response.status === 429) {
+                setError('Rate limit exceeded. Please try again later.');
+                return;
+            }
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('API Error:', errorData);
+                setError(`API Error: ${errorData.error.message}`);
+                return;
+            }
+
+            const data = await response.json();
+            console.log('API Response:', data);
+            setTranscription(data.text);
+        } catch (error) {
+            console.error('Network Error:', error);
+            setError('Network Error: ' + error.message);
+        }
     };
 
     const handleApiKeyChange = (e) => {
@@ -88,6 +117,7 @@ export default function Home() {
             {recordingIndicator && <div className="recording-indicator">Recording...</div>}
             {audioUrl && <audio src={audioUrl} controls />}
             <p>{transcription}</p>
+            {error && <p className="error">{error}</p>}
         </div>
     );
 }

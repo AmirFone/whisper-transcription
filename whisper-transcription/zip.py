@@ -77,7 +77,7 @@ def count_tokens(text_data):
     return len(tokens)
 
 # Specify the path to your zip file
-zip_file_path = '/Users/amirhossain/Desktop/projects /whisper-transcription/whisper-transcription'
+zip_file_path = '/Users/amirhossain/Desktop/projects /whisper-transcription/whisper-transcription/whisper-transcription-main.zip'
 
 # Extract text from the zip file
 with zipfile.ZipFile(zip_file_path, 'r') as zip_file:
