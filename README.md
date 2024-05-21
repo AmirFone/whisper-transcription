@@ -1,0 +1,2 @@
+# whisper-transcription
+Quickly transcribe
